@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cancer Risk Prediction Tool</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .title { margin-bottom: 8px; color: #333; text-align: center; }
+        .subtitle { color: #666; margin-bottom: 24px; text-align: center; }
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 32px;
+        }
+        .input-section {
+            flex: 1 1 40%;
+            min-width: 300px;
+        }
+        .results-section {
+            flex: 1 1 50%;
+            min-width: 300px;
+        }
+        .input-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .help-text {
+            font-size: 0.875rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .note {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 16px 0;
+            font-size: 0.875rem;
+            color: #666;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        button:hover { background: #1d4ed8; }
+        .probability-bar {
+            margin-bottom: 12px;
+            border-radius: 8px;
+            padding: 12px;
+            color: black;
+            font-weight: bold;
+            position: relative;
+            transition: transform 0.2s ease;
+            cursor: pointer;
+        }
+        .probability-bar:hover {
+            transform: scale(1.02);
+        }
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+            top: 50%;
+            left: 110%;
+            transform: translateY(-50%);
+            width: 300px;
+            background: #333;
+            color: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            z-index: 10;
+            transition: opacity 0.3s ease;
+            opacity: 0;
+        }
+        .probability-bar:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Cancer Risk Prediction Tool</h1>
+        <p class="subtitle">Based on NHANES 2021-2023 Dataset</p>
+
+        <div class="flex-container">
+            <!-- Input Section -->
+            <div class="input-section">
+                <div class="input-group">
+                    <label>Family Monthly Poverty Level Index (INDFMMPI)</label>
+                    <p class="help-text">
+                        This index represents the ratio of your family’s monthly income to the official poverty guidelines for your family size.
+                    </p>
+                    <ul class="help-text">
+                        <li>If your family income is exactly at the poverty line, your index value is 1.0.</li>
+                        <li>A value of 2.0 means your income is twice the poverty line; 0.5 means it’s half.</li>
+                        <li>Enter a value from 0.00 to 4.94 if your income is within the normal range.</li>
+                        <li>Enter 5.00 if your income is significantly higher (e.g., ≥5 times the poverty line).</li>
+                    </ul>
+                    <input type="number" id="povertyIndex" min="0" max="5" step="0.01">
+                </div>
+
+                <div class="input-group">
+                    <label>Daily Sedentary Minutes (PAD680)</label>
+                    <p class="help-text">
+                        The total amount of time you spend sitting or lying down each day, excluding sleep.
+                    </p>
+                    <ul class="help-text">
+                        <li>Calculate your sedentary minutes by adding time spent sitting (e.g., at work, commuting, watching TV).</li>
+                        <li>For example, 8 hours at work, 1 hour commuting, and 2 hours watching TV equals 660 minutes.</li>
+                        <li>Enter a value from 0 to 1380.</li>
+                        <li>If you refuse to answer, enter 7777.</li>
+                        <li>If you don’t know your sedentary time, enter 9999.</li>
+                    </ul>
+                    <input type="number" id="sedentaryMinutes" min="0" max="1380">
+                </div>
+
+                <div class="input-group">
+                    <label>Smoking History (SMQ020)</label>
+                    <p class="help-text">Have you smoked at least 100 cigarettes in your entire life?</p>
+                    <select id="smokingStatus">
+                        <option value="No">No</option>
+                        <option value="Yes">Yes</option>
+                        <option value="Refused">Refused</option>
+                        <option value="Don't know">Don't know</option>
+                    </select>
+                </div>
+
+                <div class="note">
+                    <p>Other Predictors (100+): Using default values (mean values for numerical predictors and 0 value for categorical predictors) </p>
+                </div>
+
+                <button onclick="calculateRisk()">Calculate Risk</button>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section">
+                <h2>Predicted Cancer Type Probabilities:</h2>
+                <div id="results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const cancerDetails = {
+            "Blood and Immune": {
+                "keyFactors": ["Age", "Family history of blood cancers", "Chemical/radiation exposure"],
+                "includedCancers": ["Blood", "Leukemia", "Lymphoma"]
+            },
+            "Digestive": {
+                "keyFactors": ["Diet (processed meat)", "Smoking history", "Poverty index"],
+                "includedCancers": ["Colon", "Esophagus", "Liver", "Pancreas", "Rectum", "Stomach"]
+            },
+            "Lung": {
+                "keyFactors": ["Smoking history", "Occupational exposure", "Sedentary lifestyle"],
+                "includedCancers": ["Lung", "Larynx"]
+            },
+            "Other Unclassified": {
+                "keyFactors": ["Age", "Family history", "Overall health status"],
+                "includedCancers": ["Other", "Unknown"]
+            },
+            "Reproductive": {
+                "keyFactors": ["Hormonal factors", "Family history", "Age"],
+                "includedCancers": ["Ovary", "Cervix", "Prostate", "Uterus", "Testis", "Breast"]
+            },
+            "Skin and Soft Tissue": {
+                "keyFactors": ["Sun exposure", "Family history", "Age"],
+                "includedCancers": ["Skin", "Unknown skin type", "Soft tissue", "Melanoma"]
+            },
+            "Urinary": {
+                "keyFactors": ["Smoking history", "Sedentary behavior", "Age"],
+                "includedCancers": ["Bladder", "Kidney"]
+            }
+        };        
+
+        function calculateRisk() {
+            const predictions = {
+                "Digestive": 16.7,
+                "Other Unclassified": 16.3,
+                "Lung": 15.2,
+                "Skin and Soft Tissue": 15.2,
+                "Reproductive": 13.6,
+                "Urinary": 12.1,
+                "Blood and Immune": 10.6
+            };
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            Object.entries(predictions).forEach(([type, prob]) => {
+                const details = cancerDetails[type];
+                const tooltipContent = `
+                    <strong>Key Factors:</strong>
+                    <ul>
+                        ${details.keyFactors.map(factor => `<li>${factor}</li>`).join('')}
+                    </ul>
+                    <br>
+                    <strong>Included Cancers:</strong>
+                    <ul>
+                        ${details.includedCancers.map(cancer => `<li>${cancer}</li>`).join('')}
+                    </ul>
+                `;
+
+                const redShade = Math.round(255 - prob * 10); 
+                const bar = document.createElement('div');
+                bar.className = 'probability-bar';
+                bar.style.backgroundColor = `rgb(255, ${redShade}, ${redShade})`;
+                bar.innerHTML = `
+                    ${type}: ${prob}%
+                    <div class="tooltip">${tooltipContent}</div>
+                `;
+                resultsDiv.appendChild(bar);
+            });
+        }
+    </script>
+</body>
+</html>
